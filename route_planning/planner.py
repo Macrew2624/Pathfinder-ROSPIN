@@ -26,6 +26,24 @@ def plan_route(
     strategy_name: str = "astar",
     config: PlanningConfig | None = None,
 ) -> RouteResult:
+
+    """Plan a route from acquisition outputs and save a GeoJSON LineString.
+
+    This function coordinates I/O, shared terrain constraints, strategy
+    selection, output conversion, and summary metrics. Search itself stays in
+    the selected strategy implementation.
+    """
+    start_lonlat, end_lonlat = _read_endpoints(Path(endpoints_path))
+    return plan_route_from_endpoints(start_lonlat, end_lonlat, dem_path, sentinel2_path, output_path, strategy_name, config)
+
+def plan_route_from_endpoints(
+    start_lonlat, end_lonlat,
+    dem_path: Path | str = PROJECT_ROOT / "data" / "copernicus_dem_glo30.tif",
+    sentinel2_path: Path | str = PROJECT_ROOT / "data" / "sentinel2_l2a.tif",
+    output_path: Path | str = PROJECT_ROOT / "route_planning" / "output" / "planned_route.geojson",
+    strategy_name: str = "astar",
+    config: PlanningConfig | None = None,
+) -> RouteResult:
     """Plan a route from acquisition outputs and save a GeoJSON LineString.
 
     This function coordinates I/O, shared terrain constraints, strategy
@@ -34,7 +52,6 @@ def plan_route(
     """
     config = config or PlanningConfig()
     strategy = create_strategy(strategy_name)
-    start_lonlat, end_lonlat = _read_endpoints(Path(endpoints_path))
 
     # Open both rasters together so they are closed reliably after planning,
     # including when validation or route search raises an error.
@@ -64,6 +81,8 @@ def plan_route(
 
 def _read_endpoints(path: Path) -> tuple[tuple[float | int, ...], tuple[float | int, ...]]:
     """Load the acquisition GeoJSON and return its WGS84 start/end points."""
+    if not path.exists():
+        raise  ValueError("Endpoint file does not exist!")
     document = json.loads(path.read_text(encoding="utf-8"))
     geometry: Any = document.get("geometry")
     if document.get("type") == "Feature":

@@ -43,6 +43,18 @@ py -m route_planning `
   --output .\route_planning\output\route.geojson
 ```
 
+To try the included sample endpoints, pass `../data/road_endpoints.geojson`:
+
+```powershell
+py -m route_planning `
+  --endpoints .\route_planning\dummy_endpoints.geojson `
+  --output .\route_planning\output\dummy_route.geojson
+```
+
+The points are in WGS84 and fall within the example acquisition area. A route
+can still fail if either endpoint cell is water, nodata, or over the configured
+slope limit.
+
 ## Add a strategy
 
 Implement `RouteStrategy.find_path(cost_surface, start_rc, end_rc)` and

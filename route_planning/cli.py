@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 from .models import PlanningConfig
-from .planner import PROJECT_ROOT, plan_route, strategy_names
+from .planner import PROJECT_ROOT, plan_route_from_endpoints, strategy_names, plan_route
 
 
 def build_parser() -> argparse.ArgumentParser:
