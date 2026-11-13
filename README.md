@@ -64,3 +64,21 @@ print(files["sentinel2"])
 ```
 
 The returned dictionary contains `Path` values for `sentinel2`, `sentinel1`, `dem`, and `road_endpoints`. You can also pass `client_id` and `client_secret` to `DataAcquisition(...)` directly, for example when the application manages secrets outside a local env file.
+
+## Plan a candidate route
+
+The `route_planning/` package builds a terrain cost surface from the acquired
+DEM and Sentinel-2 rasters, then runs a selectable route-search strategy. The
+initial strategy is A* via `pyastar2d`. Its defaults block water (Sentinel-2
+SCL class 6), invalid pixels, and terrain above a 10-degree local slope. Tune
+the maximum slope and slope penalty for each planning scenario:
+
+```powershell
+py -m pip install -r requirements.txt
+py -m route_planning --max-slope-degrees 8 --slope-cost-weight 4
+```
+
+The route is saved by default to
+`route_planning/output/planned_route.geojson`. See
+[`route_planning/README.md`](route_planning/README.md) for the cost model,
+available options, and instructions for adding strategies such as ACO.
