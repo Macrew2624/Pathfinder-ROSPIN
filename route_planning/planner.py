@@ -11,7 +11,7 @@ import rasterio
 from pyproj import Transformer
 from rasterio.transform import rowcol, xy
 
-from config import BBOX_PADDING, PROJECT_ROOT
+from config import BBOX_PADDING, PROJECT_ROOT, DEBUG
 from data_acquisition.obtain_data import DataAcquisition
 from .cost_surface import build_cost_surface
 from .models import PlanningConfig, RouteResult
@@ -113,10 +113,12 @@ def _ensure_coverage(dem_path: Path, sentinel2_path: Path, start, end) -> None:
     if dem_path.is_file() and sentinel2_path.is_file():
         try:
             _check_raster_coverage(dem_path, sentinel2_path, start, end)
-            print("Using cached data!")
+            if DEBUG:
+               print("Using cached data!")
             return
         except _OutsideCoverage:
-            print("Redownloading satellite data!")
+            if DEBUG:
+                print("Redownloading satellite data!")
             pass
 
     west, east = sorted((start[0], end[0]))

@@ -80,7 +80,6 @@ def run_planning_test(
 def test_sample_route() -> RouteResult:
     """Read the sample endpoints GeoJSON and run the interactive route test."""
     start, end = _read_sample_endpoints(DEFAULT_ENDPOINTS_PATH)
-    print(start, end)
     return run_planning_test(start, end)
 
 
