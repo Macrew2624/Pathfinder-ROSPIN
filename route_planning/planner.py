@@ -11,26 +11,22 @@ import rasterio
 from pyproj import Transformer
 from rasterio.transform import rowcol, xy
 
+from config import BBOX_PADDING, PROJECT_ROOT
 from data_acquisition.obtain_data import DataAcquisition
-from .config import BBOX_PADDING
-
 from .cost_surface import build_cost_surface
 from .models import PlanningConfig, RouteResult
 from .strategies import create_strategy
 from .strategies.registry import available_strategies
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-
 
 def plan_route(
-    dem_path: Path | str = PROJECT_ROOT / "data" / "copernicus_dem_glo30.tif",
-    sentinel2_path: Path | str = PROJECT_ROOT / "data" / "sentinel2_l2a.tif",
-    endpoints_path: Path | str = PROJECT_ROOT / "data" / "road_endpoints.geojson",
-    output_path: Path | str = PROJECT_ROOT / "route_planning" / "output" / "planned_route.geojson",
-    strategy_name: str = "astar",
-    config: PlanningConfig | None = None,
+        dem_path: Path | str = PROJECT_ROOT / "data" / "copernicus_dem_glo30.tif",
+        sentinel2_path: Path | str = PROJECT_ROOT / "data" / "sentinel2_l2a.tif",
+        endpoints_path: Path | str = PROJECT_ROOT / "data" / "road_endpoints.geojson",
+        output_path: Path | str = PROJECT_ROOT / "route_planning" / "output" / "planned_route.geojson",
+        strategy_name: str = "astar",
+        config: PlanningConfig | None = None,
 ) -> RouteResult:
-
     """Plan a route from acquisition outputs and save a GeoJSON LineString.
 
     This function coordinates I/O, shared terrain constraints, strategy
@@ -38,15 +34,17 @@ def plan_route(
     the selected strategy implementation.
     """
     start_lonlat, end_lonlat = _read_endpoints(Path(endpoints_path))
-    return plan_route_from_endpoints(start_lonlat, end_lonlat, dem_path, sentinel2_path, output_path, strategy_name, config)
+    return plan_route_from_endpoints(start_lonlat, end_lonlat, dem_path, sentinel2_path, output_path, strategy_name,
+                                     config)
+
 
 def plan_route_from_endpoints(
-    start_lonlat, end_lonlat,
-    dem_path: Path | str = PROJECT_ROOT / "data" / "copernicus_dem_glo30.tif",
-    sentinel2_path: Path | str = PROJECT_ROOT / "data" / "sentinel2_l2a.tif",
-    output_path: Path | str = PROJECT_ROOT / "route_planning" / "output" / "planned_route.geojson",
-    strategy_name: str = "astar",
-    config: PlanningConfig | None = None,
+        start_lonlat, end_lonlat,
+        dem_path: Path | str = PROJECT_ROOT / "data" / "copernicus_dem_glo30.tif",
+        sentinel2_path: Path | str = PROJECT_ROOT / "data" / "sentinel2_l2a.tif",
+        output_path: Path | str = PROJECT_ROOT / "route_planning" / "output" / "planned_route.geojson",
+        strategy_name: str = "astar",
+        config: PlanningConfig | None = None,
 ) -> RouteResult:
     """Plan a route from acquisition outputs and save a GeoJSON LineString.
 
@@ -87,7 +85,7 @@ def plan_route_from_endpoints(
 def _read_endpoints(path: Path) -> tuple[tuple[float | int, ...], tuple[float | int, ...]]:
     """Load the acquisition GeoJSON and return its WGS84 start/end points."""
     if not path.exists():
-        raise  ValueError("Endpoint file does not exist!")
+        raise ValueError("Endpoint file does not exist!")
     document = json.loads(path.read_text(encoding="utf-8"))
     geometry: Any = document.get("geometry")
     if document.get("type") == "Feature":
@@ -104,7 +102,7 @@ def _read_endpoints(path: Path) -> tuple[tuple[float | int, ...], tuple[float | 
     return start, end
 
 
-def _ensure_coverage(dem_path: Path, sentinel2_path: Path,start, end) -> None:
+def _ensure_coverage(dem_path: Path, sentinel2_path: Path, start, end) -> None:
     """Reuse both local rasters when their grids contain both WGS84 points."""
     for lon, lat in (start, end):
         if not (-180 <= lon <= 180 and -90 <= lat <= 90):
@@ -162,8 +160,8 @@ class _OutsideCoverage(ValueError):
 
 
 def _point_to_cell(
-    dataset: rasterio.io.DatasetReader,
-    point_lonlat: tuple[float, float],
+        dataset: rasterio.io.DatasetReader,
+        point_lonlat: tuple[float, float],
 ) -> tuple[int, int]:
     """Project a WGS84 endpoint and locate its containing raster cell."""
     to_raster_crs = Transformer.from_crs("EPSG:4326", dataset.crs, always_xy=True)
@@ -186,9 +184,9 @@ def _check_endpoint(name: str, cell: tuple[int, int], blocked: np.ndarray) -> No
 
 
 def _path_metrics(
-    path_rc: np.ndarray,
-    costs: np.ndarray,
-    resolution: tuple[float, float],
+        path_rc: np.ndarray,
+        costs: np.ndarray,
+        resolution: tuple[float, float],
 ) -> tuple[float, float]:
     """Measure path distance and integrated relative cost along grid edges.
 
@@ -211,10 +209,10 @@ def _path_metrics(
 
 
 def _path_to_wgs84(
-    path_rc: np.ndarray,
-    dem: rasterio.io.DatasetReader,
-    start_lonlat: tuple[float, float],
-    end_lonlat: tuple[float, float],
+        path_rc: np.ndarray,
+        dem: rasterio.io.DatasetReader,
+        start_lonlat: tuple[float, float],
+        end_lonlat: tuple[float, float],
 ) -> list[list[float]]:
     """Convert cell centers to WGS84 and retain the user's exact endpoints."""
     to_wgs84 = Transformer.from_crs(dem.crs, "EPSG:4326", always_xy=True)
@@ -234,10 +232,10 @@ def _path_to_wgs84(
 
 
 def _write_route(
-    path: Path,
-    coordinates: list[list[float]],
-    result: RouteResult,
-    config: PlanningConfig,
+        path: Path,
+        coordinates: list[list[float]],
+        result: RouteResult,
+        config: PlanningConfig,
 ) -> None:
     """Write route geometry and planning settings as a GeoJSON Feature."""
     path.parent.mkdir(parents=True, exist_ok=True)

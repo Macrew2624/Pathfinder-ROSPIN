@@ -12,6 +12,8 @@ import requests
 from dotenv import load_dotenv
 from pyproj import Transformer
 
+from config import RASTER_RESOLUTION, PROJECT_ROOT
+
 S2_EVALSCRIPT = """//VERSION=3
 function setup() {
   return { input: [{ bands: ["B02", "B03", "B04", "B08", "B11", "B12", "SCL", "dataMask"] }],
@@ -39,9 +41,6 @@ function evaluatePixel(s) { return [s.DEM, s.dataMask]; }
 """
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-
-
 def build_parser() -> argparse.ArgumentParser:
     today = date.today()
     parser = argparse.ArgumentParser(
@@ -53,10 +52,12 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Road start point in WGS84 longitude/latitude.")
     parser.add_argument("--end", nargs=2, type=float, required=True, metavar=("LON", "LAT"),
                         help="Road end point in WGS84 longitude/latitude.")
-    parser.add_argument("--from-date", default=(today - timedelta(days=90)).isoformat(), help="Imagery window start (YYYY-MM-DD; default: 90 days ago).")
+    parser.add_argument("--from-date", default=(today - timedelta(days=90)).isoformat(),
+                        help="Imagery window start (YYYY-MM-DD; default: 90 days ago).")
     parser.add_argument("--to-date", default=today.isoformat(), help="Imagery window end (YYYY-MM-DD; default: today).")
     parser.add_argument("--resolution", type=float, default=10, help="Output pixel size in metres (default: 10).")
-    parser.add_argument("--cloud-cover", type=float, default=30, help="Maximum Sentinel-2 cloud cover percentage (default: 30).")
+    parser.add_argument("--cloud-cover", type=float, default=30,
+                        help="Maximum Sentinel-2 cloud cover percentage (default: 30).")
     parser.add_argument("--output", type=Path, default=PROJECT_ROOT / "data",
                         help="Output directory (default: project-root/data).")
     parser.add_argument("--env-file", type=Path, default=PROJECT_ROOT / ".env.local",
@@ -65,8 +66,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def validate_inputs(
-    bbox: Sequence[float], start: Sequence[float], end: Sequence[float],
-    from_date: str, to_date: str, resolution: float, cloud_cover: float,
+        bbox: Sequence[float], start: Sequence[float], end: Sequence[float],
+        from_date: str, to_date: str, resolution: float, cloud_cover: float,
 ) -> None:
     if len(bbox) != 4:
         raise ValueError("bbox must contain west, south, east, north.")
@@ -103,9 +104,9 @@ def get_token(session: requests.Session, client_id: str, client_secret: str) -> 
 
 
 def request_raster(
-    session: requests.Session, token: str, bbox: list[float], resolution: float,
-    collection: str, evalscript: str, output: Path, from_date: str, to_date: str,
-    cloud_cover: float | None = None,
+        session: requests.Session, token: str, bbox: list[float], resolution: float,
+        collection: str, evalscript: str, output: Path, from_date: str, to_date: str,
+        cloud_cover: float | None = None,
 ) -> None:
     west, south, east, north = bbox
     center_lon = (west + east) / 2
@@ -121,6 +122,12 @@ def request_raster(
     max_y = max(point[1] for point in corners)
     width = max(1, round((max_x - min_x) / resolution))
     height = max(1, round((max_y - min_y) / resolution))
+    if max(width, height) > 2500:
+        raise ValueError(
+            f"Requested raster is {width} × {height} pixels at {resolution:g} m/pixel. "
+            "Each dimension must be at most 2500 pixels. Use a smaller bounding box "
+            "or a larger pixel size."
+        )
 
     data_filter: dict[str, object] = {}
     if collection != "dem":
@@ -146,7 +153,8 @@ def request_raster(
                    "responses": [{"identifier": "default", "format": {"type": "image/tiff"}}]},
         "evalscript": evalscript,
     }
-    response = session.post(os.getenv("PROCESS_URL"), headers={"Authorization": f"Bearer {token}", "Accept": "image/tiff"},
+    response = session.post(os.getenv("PROCESS_URL"),
+                            headers={"Authorization": f"Bearer {token}", "Accept": "image/tiff"},
                             json=request_body, timeout=300)
     if not response.ok:
         detail = response.text[:1200]
@@ -154,14 +162,15 @@ def request_raster(
     output.write_bytes(response.content)
     print(f"Saved {output} ({width} x {height} px, EPSG:{epsg})")
 
+
 class DataAcquisition:
     """Fetch and save the three raster layers and road endpoint geometry."""
 
     def __init__(
-        self,
-        client_id: str | None = None,
-        client_secret: str | None = None,
-        env_file: Path | str = PROJECT_ROOT / ".env.local",
+            self,
+            client_id: str | None = None,
+            client_secret: str | None = None,
+            env_file: Path | str = PROJECT_ROOT / ".env.local",
     ) -> None:
         load_dotenv(Path(env_file))
         self.client_id = client_id or os.getenv("CDSE_CLIENT_ID")
@@ -173,15 +182,15 @@ class DataAcquisition:
             )
 
     def obtain_data(
-        self,
-        bbox: Sequence[float],
-        start: Sequence[float]|None=None,
-        end: Sequence[float]|None=None,
-        from_date: str | None = None,
-        to_date: str | None = None,
-        resolution: float = 10,
-        cloud_cover: float = 30,
-        output: Path | str = PROJECT_ROOT / "data",
+            self,
+            bbox: Sequence[float],
+            start: Sequence[float] | None = None,
+            end: Sequence[float] | None = None,
+            from_date: str | None = None,
+            to_date: str | None = None,
+            resolution: float = 10,
+            cloud_cover: float = 30,
+            output: Path | str = PROJECT_ROOT / "data",
     ) -> dict[str, Path]:
         """Download rasters for WGS84 ``bbox`` and save the requested route endpoints.
 
@@ -192,9 +201,9 @@ class DataAcquisition:
         from_date = from_date or (today - timedelta(days=90)).isoformat()
         to_date = to_date or today.isoformat()
         if not start:
-            start=bbox[0:2]
+            start = bbox[0:2]
         if not end:
-            end=bbox[2:]
+            end = bbox[2:]
         validate_inputs(bbox, start, end, from_date, to_date, resolution, cloud_cover)
 
         output_dir = Path(output)
@@ -214,9 +223,9 @@ class DataAcquisition:
         return paths
 
     def download_rasters(
-        self, bbox: Sequence[float], dem_path: Path, sentinel2_path: Path,
-        sentinel1_path: Path | None = None, from_date: str | None = None,
-        to_date: str | None = None, resolution: float = 10, cloud_cover: float = 30,
+            self, bbox: Sequence[float], dem_path: Path, sentinel2_path: Path,
+            sentinel1_path: Path | None = None, from_date: str | None = None,
+            to_date: str | None = None, resolution: float = RASTER_RESOLUTION, cloud_cover: float = 30,
     ) -> None:
         """Fetch the requested layers on the same grid in one authenticated session."""
         today = date.today()

@@ -1,1 +1,0 @@
-BBOX_PADDING=.1
