@@ -33,7 +33,7 @@ The Sentinel products are mosaicked over the requested date range. Sentinel-2 us
 Coordinates are WGS84 longitude/latitude. `--bbox` is `west south east north`; both route points must be inside it.
 
 ```powershell
-py .\data_acquisition\obtain_data.py `
+py -m data_acquisition.obtain_data `
   --bbox 24.90 45.80 25.10 46.00 `
   --start 24.94 45.84 `
   --end 25.06 45.96 `
@@ -43,6 +43,8 @@ py .\data_acquisition\obtain_data.py `
 ```
 
 The defaults use a 90-day imagery window, 10 m output pixels, and a 30% Sentinel-2 cloud-cover limit. Adjust with `--resolution` and `--cloud-cover`. Results are written to `data/sentinel2_l2a.tif`, `data/sentinel1_grd.tif`, `data/copernicus_dem_glo30.tif`, and `data/road_endpoints.geojson`.
+
+Each raster request can be up to 2,500 pixels wide and 2,500 pixels tall. The downloader projects the bounding box into UTM and checks both dimensions before requesting the image. At 10 m per pixel, each side can span about 25 km. If the error reports a larger dimension, reduce the bounding box while keeping both endpoints inside, or use a coarser pixel size such as `--resolution 20`.
 
 ### Call from Python
 
@@ -78,7 +80,8 @@ py -m pip install -r requirements.txt
 py -m route_planning --max-slope-degrees 8 --slope-cost-weight 4
 ```
 
-The route is saved by default to
-`route_planning/output/planned_route.geojson`. See
-[`route_planning/README.md`](route_planning/README.md) for the cost model,
-available options, and instructions for adding strategies such as ACO.
+The route is saved by default to `route_planning/output/planned_route.geojson`.
+Run `py -m route_planning.test` from the project root to plan the sample route
+and view it on a 3D terrain surface with elevation at true scale.
+The [route planning guide](route_planning/README.md) explains the slope
+constraint, how to interpret the plot, and how to add search strategies.
