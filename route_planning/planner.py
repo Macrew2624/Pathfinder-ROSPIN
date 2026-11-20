@@ -3,12 +3,16 @@ from __future__ import annotations
 import json
 import math
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any
 
 import numpy as np
 import rasterio
 from pyproj import Transformer
 from rasterio.transform import rowcol, xy
+
+from data_acquisition.obtain_data import DataAcquisition
+from .config import BBOX_PADDING
 
 from .cost_surface import build_cost_surface
 from .models import PlanningConfig, RouteResult
@@ -52,6 +56,7 @@ def plan_route_from_endpoints(
     """
     config = config or PlanningConfig()
     strategy = create_strategy(strategy_name)
+    _ensure_coverage(Path(dem_path), Path(sentinel2_path), start_lonlat, end_lonlat)
 
     # Open both rasters together so they are closed reliably after planning,
     # including when validation or route search raises an error.
@@ -99,6 +104,63 @@ def _read_endpoints(path: Path) -> tuple[tuple[float | int, ...], tuple[float | 
     return start, end
 
 
+def _ensure_coverage(dem_path: Path, sentinel2_path: Path,start, end) -> None:
+    """Reuse both local rasters when their grids contain both WGS84 points."""
+    for lon, lat in (start, end):
+        if not (-180 <= lon <= 180 and -90 <= lat <= 90):
+            raise ValueError("Endpoints must be valid WGS84 longitude/latitude pairs.")
+    if dem_path.resolve() == sentinel2_path.resolve():
+        raise ValueError("DEM and Sentinel-2 must have separate paths.")
+
+    if dem_path.is_file() and sentinel2_path.is_file():
+        try:
+            _check_raster_coverage(dem_path, sentinel2_path, start, end)
+            print("Using cached data!")
+            return
+        except _OutsideCoverage:
+            print("Redownloading satellite data!")
+            pass
+
+    west, east = sorted((start[0], end[0]))
+    south, north = sorted((start[1], end[1]))
+    # Leave room for detours, including on horizontal or vertical routes.
+    lon_pad = max(0.01, (east - west) * BBOX_PADDING)
+    lat_pad = max(0.01, (north - south) * BBOX_PADDING)
+    bbox = (max(-180, west - lon_pad), max(-90, south - lat_pad),
+            min(180, east + lon_pad), min(90, north + lat_pad))
+
+    dem_path.parent.mkdir(parents=True, exist_ok=True)
+    sentinel2_path.parent.mkdir(parents=True, exist_ok=True)
+    with TemporaryDirectory(dir=dem_path.parent) as dem_dir, TemporaryDirectory(dir=sentinel2_path.parent) as s2_dir:
+        new_dem = Path(dem_dir) / "dem.tif"
+        new_s2 = Path(s2_dir) / "sentinel2.tif"
+        DataAcquisition().download_rasters(bbox, new_dem, new_s2)
+        _check_raster_coverage(new_dem, new_s2, start, end)
+        previous_dem = Path(dem_dir) / "previous.tif"
+        if dem_path.exists():
+            dem_path.replace(previous_dem)
+        try:
+            new_dem.replace(dem_path)
+            new_s2.replace(sentinel2_path)
+        except OSError:
+            if previous_dem.exists():
+                previous_dem.replace(dem_path)
+            else:
+                dem_path.unlink(missing_ok=True)
+            raise
+
+
+def _check_raster_coverage(dem_path: Path, sentinel2_path: Path, start, end) -> None:
+    for path in (dem_path, sentinel2_path):
+        with rasterio.open(path) as dataset:
+            _point_to_cell(dataset, start)
+            _point_to_cell(dataset, end)
+
+
+class _OutsideCoverage(ValueError):
+    """The projected point has no containing pixel."""
+
+
 def _point_to_cell(
     dataset: rasterio.io.DatasetReader,
     point_lonlat: tuple[float, float],
@@ -106,9 +168,11 @@ def _point_to_cell(
     """Project a WGS84 endpoint and locate its containing raster cell."""
     to_raster_crs = Transformer.from_crs("EPSG:4326", dataset.crs, always_xy=True)
     x_coord, y_coord = to_raster_crs.transform(*point_lonlat)
+    if not (math.isfinite(x_coord) and math.isfinite(y_coord)):
+        raise _OutsideCoverage(f"Endpoint {point_lonlat} lies outside the raster coverage.")
     row, col = rowcol(dataset.transform, x_coord, y_coord)
     if not (0 <= row < dataset.height and 0 <= col < dataset.width):
-        raise ValueError(f"Endpoint {point_lonlat} lies outside the raster coverage.")
+        raise _OutsideCoverage(f"Endpoint {point_lonlat} lies outside the raster coverage.")
     return int(row), int(col)
 
 

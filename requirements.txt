@@ -3,3 +3,6 @@ pyproj>=3.6,<4
 requests>=2.31,<3
 rasterio
 pyastar2d>=1.1.4,<2
+matplotlib>=3.8,<4
+
+numpy

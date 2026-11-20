@@ -175,8 +175,8 @@ class DataAcquisition:
     def obtain_data(
         self,
         bbox: Sequence[float],
-        start: Sequence[float],
-        end: Sequence[float],
+        start: Sequence[float]|None=None,
+        end: Sequence[float]|None=None,
         from_date: str | None = None,
         to_date: str | None = None,
         resolution: float = 10,
@@ -191,6 +191,10 @@ class DataAcquisition:
         today = date.today()
         from_date = from_date or (today - timedelta(days=90)).isoformat()
         to_date = to_date or today.isoformat()
+        if not start:
+            start=bbox[0:2]
+        if not end:
+            end=bbox[2:]
         validate_inputs(bbox, start, end, from_date, to_date, resolution, cloud_cover)
 
         output_dir = Path(output)
@@ -201,19 +205,32 @@ class DataAcquisition:
             "dem": output_dir / "copernicus_dem_glo30.tif",
             "road_endpoints": output_dir / "road_endpoints.geojson",
         }
-        with requests.Session() as session:
-            token = get_token(session, self.client_id, self.client_secret)
-            common = (session, token, list(bbox), resolution)
-            request_raster(*common, "sentinel-2-l2a", S2_EVALSCRIPT, paths["sentinel2"],
-                           from_date, to_date, cloud_cover)
-            request_raster(*common, "sentinel-1-grd", S1_EVALSCRIPT, paths["sentinel1"],
-                           from_date, to_date)
-            request_raster(*common, "dem", DEM_EVALSCRIPT, paths["dem"], from_date, to_date)
+        self.download_rasters(bbox, paths["dem"], paths["sentinel2"], paths["sentinel1"],
+                              from_date, to_date, resolution, cloud_cover)
 
         route = {"type": "Feature", "properties": {"name": "planned_road_endpoints"},
                  "geometry": {"type": "LineString", "coordinates": [list(start), list(end)]}}
         paths["road_endpoints"].write_text(json.dumps(route, indent=2) + "\n", encoding="utf-8")
         return paths
+
+    def download_rasters(
+        self, bbox: Sequence[float], dem_path: Path, sentinel2_path: Path,
+        sentinel1_path: Path | None = None, from_date: str | None = None,
+        to_date: str | None = None, resolution: float = 10, cloud_cover: float = 30,
+    ) -> None:
+        """Fetch the requested layers on the same grid in one authenticated session."""
+        today = date.today()
+        from_date = from_date or (today - timedelta(days=90)).isoformat()
+        to_date = to_date or today.isoformat()
+        with requests.Session() as session:
+            token = get_token(session, self.client_id, self.client_secret)
+            common = (session, token, list(bbox), resolution)
+            request_raster(*common, "sentinel-2-l2a", S2_EVALSCRIPT, sentinel2_path,
+                           from_date, to_date, cloud_cover)
+            if sentinel1_path is not None:
+                request_raster(*common, "sentinel-1-grd", S1_EVALSCRIPT, sentinel1_path,
+                               from_date, to_date)
+            request_raster(*common, "dem", DEM_EVALSCRIPT, dem_path, from_date, to_date)
 
 
 def main() -> int:
